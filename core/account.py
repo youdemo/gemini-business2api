@@ -606,3 +606,39 @@ def update_account_disabled_status(
     status_text = "已禁用" if disabled else "已启用"
     logger.info(f"[CONFIG] 账户 {account_id} {status_text}")
     return multi_account_mgr
+
+
+def bulk_update_account_disabled_status(
+    account_ids: list[str],
+    disabled: bool,
+    multi_account_mgr: MultiAccountManager,
+) -> tuple[int, list[str]]:
+    """批量更新账户禁用状态，单次最多50个，仅读写一次文件"""
+    success_count = 0
+    errors = []
+
+    # 1. 更新内存状态
+    for account_id in account_ids:
+        if account_id not in multi_account_mgr.accounts:
+            errors.append(f"{account_id}: 账户不存在")
+            continue
+        account_mgr = multi_account_mgr.accounts[account_id]
+        account_mgr.config.disabled = disabled
+        success_count += 1
+
+    # 2. 只读取一次文件
+    accounts_data = load_accounts_from_source()
+    account_id_set = set(account_ids)
+
+    # 3. 批量更新
+    for i, acc in enumerate(accounts_data, 1):
+        acc_id = get_account_id(acc, i)
+        if acc_id in account_id_set:
+            acc["disabled"] = disabled
+
+    # 4. 只保存一次
+    save_accounts_to_file(accounts_data)
+
+    status_text = "已禁用" if disabled else "已启用"
+    logger.info(f"[CONFIG] 批量{status_text} {success_count}/{len(account_ids)} 个账户")
+    return success_count, errors

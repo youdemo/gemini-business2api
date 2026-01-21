@@ -64,7 +64,8 @@ from core.account import (
     reload_accounts as _reload_accounts,
     update_accounts_config as _update_accounts_config,
     delete_account as _delete_account,
-    update_account_disabled_status as _update_account_disabled_status
+    update_account_disabled_status as _update_account_disabled_status,
+    bulk_update_account_disabled_status as _bulk_update_account_disabled_status
 )
 
 # 导入 Uptime 追踪器
@@ -1118,6 +1119,33 @@ async def admin_enable_account(request: Request, account_id: str):
     except Exception as e:
         logger.error(f"[CONFIG] 启用账户失败: {str(e)}")
         raise HTTPException(500, f"启用失败: {str(e)}")
+
+@app.put("/admin/accounts/bulk-enable")
+@require_login()
+async def admin_bulk_enable_accounts(request: Request, account_ids: list[str]):
+    """批量启用账户，单次最多50个"""
+    global multi_account_mgr
+    success_count, errors = _bulk_update_account_disabled_status(
+        account_ids, False, multi_account_mgr
+    )
+    # 重置运行时错误状态
+    for account_id in account_ids:
+        if account_id in multi_account_mgr.accounts:
+            account_mgr = multi_account_mgr.accounts[account_id]
+            account_mgr.is_available = True
+            account_mgr.error_count = 0
+            account_mgr.last_429_time = 0.0
+    return {"status": "success", "success_count": success_count, "errors": errors}
+
+@app.put("/admin/accounts/bulk-disable")
+@require_login()
+async def admin_bulk_disable_accounts(request: Request, account_ids: list[str]):
+    """批量禁用账户，单次最多50个"""
+    global multi_account_mgr
+    success_count, errors = _bulk_update_account_disabled_status(
+        account_ids, True, multi_account_mgr
+    )
+    return {"status": "success", "success_count": success_count, "errors": errors}
 
 # ---------- Auth endpoints (API) ----------
 @app.get("/admin/settings")
